@@ -5,23 +5,86 @@ import corona.business.Employee;
 import corona.business.Lab;
 import corona.business.ReturnValue;
 import corona.business.Vaccine;
+import corona.data.DBConnector;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 import static corona.business.ReturnValue.OK;
 
 
 public class Solution {
+    public static PreparedStatement prepare(String quary) throws SQLException {
+        Connection connection = DBConnector.getConnection();
+        PreparedStatement pstmt = null;
+        return connection.prepareStatement(quary);
+    }
+    public static void execute(PreparedStatement pstmt) throws SQLException {
+        Connection connection = DBConnector.getConnection();
+        SQLException exep=null;
+        try {
+            pstmt.execute();
+        } catch (SQLException e) {
+            exep=e;
+        }
+        finally {
+            try {
+                pstmt.close();
+            } catch (SQLException e) {
+                if(exep == null)
+                    exep=e;
+            }
+            try {
+                if (connection != null) {
+                    connection.close();
+                }
+            } catch (SQLException e) {
+                if(exep == null)
+                    exep=e;
+            }
+            if(exep!=null)
+                throw exep;
+        }
+    }
     public static void createTables() {
+        try {
+            execute(prepare("CALL public.CreateDB();"));//TODO: copy
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public static void clearTables() {
+        try {
+            execute(prepare("CALL public.TruncateDB();"));//TODO: copy
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
-
     public static void dropTables() {
+        try {
+            execute(prepare("CALL public.DropDB();"));//TODO: copy
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public static ReturnValue addLab(Lab lab) {
+        try {
+            PreparedStatement pstmt = prepare("INSERT INTO public.labs(\n" +
+                    "\tlabid, name, city, active)\n" +
+                    "\tVALUES (?, ?, ?, ?);");
+            pstmt.setInt(1, lab.getId());
+            pstmt.setString(2, lab.getName());
+            pstmt.setString(3, lab.getCity());
+            pstmt.setBoolean(4, lab.getIsActive());
+            execute(pstmt);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         return OK;
     }
 
@@ -30,6 +93,20 @@ public class Solution {
     }
 
     public static ReturnValue deleteLab(Lab lab) {
+        try {
+            PreparedStatement pstmt1 = prepare("SELECT labID FROM public.labs WHERE labID=?");
+            pstmt1.setInt(1, lab.getId());
+            ResultSet results = pstmt1.executeQuery();
+            if(results.getFetchSize()==0)
+                return ReturnValue.NOT_EXISTS;
+            PreparedStatement pstmt2 = prepare("DELETE FROM public.labs WHERE labID=?");
+            pstmt2.setInt(1, lab.getId());
+            execute(pstmt2);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return  ReturnValue.ERROR;
+
+        }
         return OK;
     }
 
