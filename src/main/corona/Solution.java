@@ -52,7 +52,7 @@ public class Solution {
             else if (Integer.parseInt(e.getSQLState()) == PostgreSQLErrorCodes.NOT_NULL_VIOLATION.getValue())
                 return BAD_PARAMS;
             else if (Integer.parseInt(e.getSQLState()) == PostgreSQLErrorCodes.FOREIGN_KEY_VIOLATION.getValue())
-                return BAD_PARAMS;
+                return NOT_EXISTS;
             else if (Integer.parseInt(e.getSQLState()) == PostgreSQLErrorCodes.UNIQUE_VIOLATION.getValue())
                 return ALREADY_EXISTS;
             else
@@ -80,16 +80,19 @@ public class Solution {
 
         }
 
-        public void get_record(String sql, int id) throws SQLException {
+        public void get_record(String sql, int ... params) throws SQLException {
             prepare(sql);
-            pstmt.setInt(1, id);
+            if(params.length>0)
+                pstmt.setInt(1, params[0]);
+            if(params.length>1)
+                pstmt.setInt(2, params[1]);
             results = pstmt.executeQuery();
         }
 
-        public ReturnValue exists(String sql, int id) {
+        public ReturnValue exists(String sql, int ... params ) {
             ReturnValue r = OK;
             try {
-                get_record(sql, id);
+                get_record(sql, params);
                 if (results.getFetchSize() == 0)
                     r = NOT_EXISTS;
             } catch (SQLException e) {
@@ -307,51 +310,235 @@ public class Solution {
     }
 
     public static ReturnValue employeeJoinLab(Integer employeeID, Integer labID, Integer salary) {
-        return OK;
+        ReturnValue ret=OK;
+        DB db= new DB();
+        try {
+            db.prepare("INSERT INTO public.working(\n" +
+                    "\temployeeID, labID, salary)\n" +
+                    "\tVALUES (?, ?, ?);");
+            db.pstmt.setInt(1, employeeID);
+            db.pstmt.setInt(2, labID);
+            db.pstmt.setInt(3, salary);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
-    public static ReturnValue employeeLeftLab(Integer labID, Integer employeeID) {
-        return OK;
+    public static ReturnValue employeeLeftLab(Integer labID, Integer employeeID){
+        DB db= new DB();
+        ReturnValue ret = db.exists("SELECT * FROM public.working WHERE labID=? AND employeeID=?", labID, employeeID);
+        if(ret!=OK)
+            return ret;
+        try {
+            db.prepare("DELETE FROM public.working WHERE labID=? AND employeeID=?");
+            db.pstmt.setInt(1,labID);
+            db.pstmt.setInt(1,employeeID);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
     public static ReturnValue labProduceVaccine(Integer vaccineID, Integer labID) {
-        return OK;
+        ReturnValue ret=OK;
+        DB db= new DB();
+        try {
+            db.prepare("INSERT INTO public.producing(\n" +
+                    "\tvaccineID, labID)\n" +
+                    "\tVALUES (?, ?);");
+            db.pstmt.setInt(1, vaccineID);
+            db.pstmt.setInt(2, labID);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
     public static ReturnValue labStoppedProducingVaccine(Integer labID, Integer vaccineID) {
-        return OK;
+        DB db= new DB();
+        ReturnValue ret = db.exists("SELECT * FROM public.producing WHERE labID=? AND vaccineID=?", labID, vaccineID);
+        if(ret!=OK)
+            return ret;
+        try {
+            db.prepare("DELETE FROM public.producing WHERE labID=? AND vaccineID=?");
+            db.pstmt.setInt(1,labID);
+            db.pstmt.setInt(2,vaccineID);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
-    public static ReturnValue vaccineSold(Integer vaccineID, Integer amount) {
-        return OK;
+    public static ReturnValue vaccineSold(Integer vaccineID, Integer amount){
+        DB db= new DB();
+        ReturnValue ret = db.exists("SELECT * FROM public.vaccines WHERE vaccineID=?", vaccineID);
+        if(ret!=OK)
+            return ret;
+        try {
+            db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost, income) =\n" +
+                    "    (SELECT CASE WHEN productivity<85 THEN productivity+15\tELSE 100 END,\n" +
+                    "\t \t\tunits_in_stock-?,\n" +
+                    "\t \t\tcost*2,\n" +
+                    "\t \t\tincome+?*cost\n" +
+                    "\t FROM public.vaccines\n" +
+                    "     WHERE vaccineID=?)\n" +
+                    "WHERE vaccineID=?;");
+            db.pstmt.setInt(1,amount);
+            db.pstmt.setInt(2,amount);
+            db.pstmt.setInt(3,vaccineID);
+            db.pstmt.setInt(4,vaccineID);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
     public static ReturnValue vaccineProduced(Integer vaccineID, Integer amount) {
-        return OK;
+        if(amount<0)
+            return BAD_PARAMS;
+        DB db= new DB();
+        ReturnValue ret = db.exists("SELECT * FROM public.vaccines WHERE vaccineID=?", vaccineID);
+        if(ret!=OK)
+            return ret;
+        try {
+            db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost) =\n" +
+                    "    (SELECT CASE WHEN productivity>15 THEN productivity-15\tELSE 0 END,\n" +
+                    "\t \t\tunits_in_stock+?,\n" +
+                    "\t \t\tcost/2\n" +
+                    "\t FROM public.vaccines\n" +
+                    "     WHERE vaccineID=?)\n" +
+                    "WHERE vaccineID=?;");
+            db.pstmt.setInt(1,amount);
+            db.pstmt.setInt(2,vaccineID);
+            db.pstmt.setInt(3,vaccineID);
+            db.pstmt.execute();
+        } catch (SQLException e) {
+            ret= Utils.get_retval(e);
+        }
+        finally {
+            db.close();
+        }
+        return ret;
     }
 
     public static Boolean isLabPopular(Integer labID) {
-        return true;
+        DB db= new DB();
+        ReturnValue ret = db.exists("SELECT *\n" +
+                "FROM v_producing\n" +
+                "WHERE labID=? AND productivity<=20", labID);
+        boolean is_popular=ret==NOT_EXISTS;
+        db.close();
+        return is_popular;
     }
 
     public static Integer getIncomeFromVaccine(Integer vaccineID) {
-        return 0;
+        DB db= new DB();
+        int income=0;
+        try {
+            db.get_record("SELECT income FROM public.vaccines WHERE vaccineID=?", vaccineID);
+            if(db.results.getFetchSize()>0)
+                income=db.results.getInt(1);
+
+        } catch (SQLException e) {
+            //income= 0;
+        } finally {
+            db.close();
+        }
+        return income;
     }
 
     public static Integer getTotalNumberOfWorkingVaccines() {
-        return 0;
+        DB db= new DB();
+        int tot_work=0;
+        try {
+            db.get_record("SELECT COUNT(*) FROM public.vaccines WHERE productivity>20");
+            if(db.results.getFetchSize()>0)
+                tot_work=db.results.getInt(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return tot_work;
     }
 
     public static Integer getTotalWages(Integer labID) {
-        return 0;
+        DB db= new DB();
+        int tot_work=0;
+        try {
+            db.get_record("SELECT SUM(salary) FROM FROM v_workingWHERE labID=?", labID);
+            if(db.results.getFetchSize()>0)
+                tot_work=db.results.getInt(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return tot_work;
     }
 
     public static Integer getBestLab() {
-        return 0;
+        DB db= new DB();
+        int best=0;
+        try {
+            db.get_record("SELECT labID\n" +
+                    "FROM v_working\n" +
+                    "WHERE city=birth_city\n" +
+                    "GROUP BY labID\n" +
+                    "ORDER BY COUNT(*) DESC, labID ASC\n" +
+                    "LIMIT 1");
+            if(db.results.getFetchSize()>0)
+                best=db.results.getInt(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return best;
     }
 
     public static String getMostPopularCity() {
-        return "";
+        DB db= new DB();
+        String popular="";
+        try {
+            db.get_record("SELECT city\n" +
+                    "FROM v_working\n" +
+                    "GROUP BY city\n" +
+                    "ORDER BY COUNT(*) DESC, city DESC\n" +
+                    "LIMIT 1\n");
+            if(db.results.getFetchSize()>0)
+                popular=db.results.getString(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return popular;
     }
 
     public static ArrayList<Integer> getPopularLabs() {
