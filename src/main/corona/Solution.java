@@ -67,6 +67,8 @@ public class Solution {
 
         public void prepare(String sql) throws SQLException {
             connection = DBConnector.getConnection();
+            if(connection==null)
+                throw new SQLException();
             pstmt = connection.prepareStatement(sql);
         }
 
@@ -99,49 +101,40 @@ public class Solution {
     }
 
     public static void createTables() {
-        Connection connection = null;
-        PreparedStatement pstmt=null;
+        DB db= new DB();
         try {
-            connection = DBConnector.getConnection();
-            pstmt=connection.prepareStatement("CALL public.CreateDB();");//TODO: copy
-            pstmt.execute();
+            db.prepare("CALL public.CreateDB();");//TODO: copy
+            db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
         }
         finally {
-            Utils.closeQuietly(pstmt);
-            Utils.closeQuietly(connection);
+            db.close();
         }
     }
 
     public static void clearTables() {
-        Connection connection = null;
-        PreparedStatement pstmt=null;
+        DB db= new DB();
         try {
-            connection = DBConnector.getConnection();
-            pstmt=connection.prepareStatement("CALL public.TruncateDB();");//TODO: copy
-            pstmt.execute();
+            db.prepare("CALL public.TruncateDB();");//TODO: copy
+            db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
         }
         finally {
-            Utils.closeQuietly(pstmt);
-            Utils.closeQuietly(connection);
+            db.close();
         }
     }
     public static void dropTables() {
-        Connection connection = null;
-        PreparedStatement pstmt=null;
+        DB db= new DB();
         try {
-            connection = DBConnector.getConnection();
-            pstmt=connection.prepareStatement("CALL public.DropDB();");//TODO: copy
-            pstmt.execute();
+            db.prepare("CALL public.DropDB();");//TODO: copy
+            db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
         }
         finally {
-            Utils.closeQuietly(pstmt);
-            Utils.closeQuietly(connection);
+            db.close();
         }
     }
 
