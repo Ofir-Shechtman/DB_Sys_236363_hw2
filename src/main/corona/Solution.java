@@ -542,15 +542,68 @@ public class Solution {
     }
 
     public static ArrayList<Integer> getPopularLabs() {
-        return new ArrayList<>();
+        DB db= new DB();
+        ArrayList<Integer> popular= new ArrayList<Integer>();
+        try {
+            db.get_record("SELECT DISTINCT labID\n" +
+                    "FROM producing\n" +
+                    "EXCEPT\n" +
+                    "SELECT labID\n" +
+                    "FROM producing\n" +
+                    "WHERE vaccineID IN (SELECT vaccineID FROM vaccines WHERE productivity<=20)\n" +
+                    "ORDER BY labID ASC\n" +
+                    "LIMIT 3");
+            if(db.results.getFetchSize()>0)
+                popular= (ArrayList<Integer>) db.results.getArray(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return popular;
     }
 
     public static ArrayList<Integer> getMostRatedVaccines() {
-        return new ArrayList<>();
+        DB db= new DB();
+        ArrayList<Integer> rated= new ArrayList<Integer>();
+        try {
+            db.get_record("SELECT vaccineID\n" +
+                    "FROM vaccines\n" +
+                    "ORDER BY productivity+units_in_stock-cost DESC\n" +
+                    "LIMIT 10");
+            if(db.results.getFetchSize()>0)
+                rated= (ArrayList<Integer>) db.results.getArray(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return rated;
     }
 
     public static ArrayList<Integer> getCloseEmployees(Integer employeeID) {
-        return new ArrayList<>();
+        DB db= new DB();
+        ArrayList<Integer> rated= new ArrayList<Integer>();
+        try {
+            db.get_record("SELECT w2.employeeID\n" +
+                    "FROM working w1\n" +
+                    "INNER JOIN working w2 ON  w1.labID=w2.labID\n" +
+                    "WHERE w1.employeeID=1 AND w2.employeeID!=1\n" +
+                    "GROUP BY w2.employeeID\n" +
+                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(*) FROM working WHERE employeeID=1)>=0.5\n" +
+                    "ORDER BY w2.employeeID ASC\n" +
+                    "LIMIT 10");
+            if(db.results.getFetchSize()>0)
+                rated= (ArrayList<Integer>) db.results.getArray(1);
+
+        } catch (SQLException e) {
+            //tot_work= 0;
+        } finally {
+            db.close();
+        }
+        return rated;
     }
 }
 
