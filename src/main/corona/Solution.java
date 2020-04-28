@@ -106,7 +106,85 @@ public class Solution {
     public static void createTables() {
         DB db= new DB();
         try {
-            db.prepare("CALL public.CreateDB();");//TODO: copy
+            //db.prepare("CALL public.CreateDB();");
+            db.prepare("CREATE TABLE labs\n" +
+                    "(\n" +
+                    "\tlabID integer,\n" +
+                    "\tname text NOT NULL,\n" +
+                    "\tcity text NOT NULL,\n" +
+                    "\tactive bool NOT NULL,\n" +
+                    "\tPRIMARY KEY (labID),\n" +
+                    "\tCHECK (labID > 0)\n" +
+                    ");\n" +
+                    "\n" +
+                    "CREATE TABLE employees\n" +
+                    "(\n" +
+                    "\temployeeID integer,\n" +
+                    "\tname text NOT NULL,\n" +
+                    "\tbirth_city text NOT NULL,\n" +
+                    "\tPRIMARY KEY (employeeID),\n" +
+                    "\tCHECK (employeeID > 0)\n" +
+                    ");\n" +
+                    "\n" +
+                    "CREATE TABLE vaccines\n" +
+                    "(\n" +
+                    "\tvaccineID integer,\n" +
+                    "\tname text NOT NULL,\n" +
+                    "\tcost integer NOT NULL,\n" +
+                    "\tunits_in_stock integer NOT NULL,\n" +
+                    "\tproductivity integer NOT NULL,\n" +
+                    "\tincome integer DEFAULT 0 NOT NULL,\n" +
+                    "\tPRIMARY KEY (vaccineID),\n" +
+                    "\tCONSTRAINT CHK_vaccines CHECK (vaccineID > 0 AND cost>=0 AND units_in_stock>=0 AND productivity>=0 AND productivity<=100)\n" +
+                    ");\n" +
+                    "\n" +
+                    "CREATE TABLE working\n" +
+                    "(\n" +
+                    "\temployeeID integer,\n" +
+                    "\tlabID integer,\n" +
+                    "\tsalary integer NOT NULL,\n" +
+                    "\tPRIMARY KEY (employeeID, labID),\n" +
+                    "\tFOREIGN KEY (employeeID) REFERENCES employees(employeeID),\n" +
+                    "\tFOREIGN KEY (labID) REFERENCES labs(labID),\n" +
+                    "\tCHECK (salary >= 0)\n" +
+                    ");\n" +
+                    "\n" +
+                    "CREATE TABLE producing\n" +
+                    "(\n" +
+                    "\tvaccineID integer,\n" +
+                    "\tlabID integer,\n" +
+                    "\tPRIMARY KEY (vaccineID, labID),\n" +
+                    "\tFOREIGN KEY (vaccineID) REFERENCES vaccines(vaccineID),\n" +
+                    "\tFOREIGN KEY (labID) REFERENCES labs(labID)\n" +
+                    ");\n" +
+                    "\n" +
+                    "CREATE OR REPLACE VIEW public.v_producing AS\n" +
+                    "SELECT l.labid,\n" +
+                    "    l.name AS lab_name,\n" +
+                    "    l.city,\n" +
+                    "    l.active AS is_active,\n" +
+                    "    v.vaccineid,\n" +
+                    "    v.name AS vaccine_name,\n" +
+                    "    v.cost,\n" +
+                    "    v.units_in_stock AS units,\n" +
+                    "    v.productivity,\n" +
+                    "\tv.income\n" +
+                    "FROM labs l\n" +
+                    "INNER JOIN producing p ON l.labid = p.labid\n" +
+                    "INNER JOIN vaccines v ON v.vaccineid = p.vaccineid;\n" +
+                    "   \n" +
+                    "CREATE OR REPLACE VIEW public.v_working AS\n" +
+                    "SELECT l.labID,\n" +
+                    "\t   l.name lab_name,\n" +
+                    "\t   l.city,\n" +
+                    "\t   l.active is_active,\n" +
+                    "\t   e.employeeID,\n" +
+                    "\t   e.name employee_name, \n" +
+                    "\t   e.birth_city,\n" +
+                    "\t   w.salary\n" +
+                    "FROM public.labs l\n" +
+                    "INNER JOIN public.working w ON l.labID=w.labID\n" +
+                    "INNER JOIN public.employees e ON e.employeeID=w.employeeID;");
             db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -119,7 +197,12 @@ public class Solution {
     public static void clearTables() {
         DB db= new DB();
         try {
-            db.prepare("CALL public.TruncateDB();");//TODO: copy
+            //db.prepare("CALL public.TruncateDB();");
+            db.prepare("TRUNCATE TABLE working;\n" +
+                    "TRUNCATE TABLE producing;\n" +
+                    "TRUNCATE TABLE labs CASCADE;\n" +
+                    "TRUNCATE TABLE employees CASCADE;\n" +
+                    "TRUNCATE TABLE vaccines CASCADE;");
             db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -131,7 +214,14 @@ public class Solution {
     public static void dropTables() {
         DB db= new DB();
         try {
-            db.prepare("CALL public.DropDB();");//TODO: copy
+            //db.prepare("CALL public.DropDB();");
+            db.prepare("DROP VIEW public.v_producing;\n" +
+                    "DROP VIEW public.v_working;\n" +
+                    "DROP TABLE producing;\n" +
+                    "DROP TABLE working;\n" +
+                    "DROP TABLE labs;\n" +
+                    "DROP TABLE employees;\n" +
+                    "DROP TABLE vaccines;");
             db.pstmt.execute();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -488,7 +578,7 @@ public class Solution {
         DB db= new DB();
         int tot_work=0;
         try {
-            db.get_record("SELECT SUM(salary) FROM FROM v_workingWHERE labID=?", labID);
+            db.get_record("SELECT SUM(salary) FROM v_working WHERE labID=? AND is_active=true", labID);
             if(db.results.getFetchSize()>0)
                 tot_work=db.results.getInt(1);
 
