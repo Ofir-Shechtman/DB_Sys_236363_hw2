@@ -61,18 +61,22 @@ public class Solution {
     }
 
     static class DB {
-        Connection connection=null;
-        PreparedStatement pstmt=null;
-        ResultSet results=null;
+        Connection connection = null;
+        PreparedStatement pstmt = null;
+        ResultSet results = null;
 
-        public void prepare(String sql) throws SQLException {
+        public void prepare(String sql, int... params) throws SQLException {
             connection = DBConnector.getConnection();
-            if(connection==null)
+            if (connection == null)
                 throw new SQLException();
             pstmt = connection.prepareStatement(sql);
+            if (params.length > 0)
+                pstmt.setInt(1, params[0]);
+            if (params.length > 1)
+                pstmt.setInt(2, params[1]);
         }
 
-        public void close(){
+        public void close() {
             Utils.closeQuietly(results);
             Utils.closeQuietly(pstmt);
             Utils.closeQuietly(connection);
@@ -80,29 +84,25 @@ public class Solution {
 
         }
 
-        public void get_record(String sql, int ... params) throws SQLException {
-            prepare(sql);
-            if(params.length>0)
-                pstmt.setInt(1, params[0]);
-            if(params.length>1)
-                pstmt.setInt(2, params[1]);
+        public void get_record(String sql, int... params) throws SQLException {
+            prepare(sql, params);
             results = pstmt.executeQuery();
+            if (!results.isBeforeFirst())
+                throw new SQLException();
+            results.next();
         }
 
-        public ReturnValue exists(String sql, int ... params ) {
-            ReturnValue r = OK;
-            try {
-                get_record(sql, params);
-                if (results.getFetchSize() == 0)
-                    r = NOT_EXISTS;
-            } catch (SQLException e) {
-                e.printStackTrace();
-                r = ERROR;
+        public ArrayList<Integer> get_array(String sql,  int... params) throws SQLException {
+            prepare(sql, params);
+            results = pstmt.executeQuery();
+            ArrayList<Integer> arr = new ArrayList<Integer>();
+            while (results.next()) {
+                arr.add(results.getInt(1));
             }
-            return r;
+            return arr;
         }
-    }
 
+    }
     public static void createTables() {
         DB db= new DB();
         try {
@@ -254,15 +254,14 @@ public class Solution {
 
     public static Lab getLabProfile(Integer labID) {
         DB db= new DB();
-        Lab lab=new Lab();
+        Lab lab= Lab.badLab();
         try {
             db.get_record("SELECT * FROM public.labs WHERE labID=?", labID);
             lab.setId(db.results.getInt(1));
             lab.setName(db.results.getString(2));
             lab.setCity(db.results.getString(3));
             lab.setIsActive(db.results.getBoolean(4));
-        } catch (SQLException e) {
-            lab= Lab.badLab();
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -271,13 +270,12 @@ public class Solution {
 
     public static ReturnValue deleteLab(Lab lab) {
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT labID FROM public.labs WHERE labID=?", lab.getId());
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret=OK;
         try {
             db.prepare("DELETE FROM public.labs WHERE labID=?");
             db.pstmt.setInt(1, lab.getId());
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -309,14 +307,13 @@ public class Solution {
 
     public static Employee getEmployeeProfile(Integer employeeID) {
         DB db= new DB();
-        Employee employee=new Employee();
+        Employee employee = Employee.badEmployee();;
         try {
             db.get_record("SELECT * FROM public.employees WHERE employeeID=?", employeeID);
             employee.setId(db.results.getInt(1));
             employee.setName(db.results.getString(2));
             employee.setCity(db.results.getString(3));
-        } catch (SQLException e) {
-            employee= Employee.badEmployee();
+        } catch (SQLException ignored) {
         } finally {
            db.close();
         }
@@ -325,13 +322,12 @@ public class Solution {
 
     public static ReturnValue deleteEmployee(Employee employee) {
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT employeeID FROM public.employees WHERE employeeID=?", employee.getId());
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret =OK;
         try {
             db.prepare("DELETE FROM public.employees WHERE employeeID=?");
             db.pstmt.setInt(1, employee.getId());
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -365,16 +361,15 @@ public class Solution {
 
     public static Vaccine getVaccineProfile(Integer vaccineID) {
         DB db= new DB();
-        Vaccine vaccine=new Vaccine();
+        Vaccine vaccine=Vaccine.badVaccine();
         try {
             db.get_record("SELECT * FROM public.vaccines WHERE vaccineID=?", vaccineID);
             vaccine.setId(db.results.getInt(1));
             vaccine.setName(db.results.getString(2));
             vaccine.setCost(db.results.getInt(3));
-            vaccine.setUnits(db.results.getInt(41));
+            vaccine.setUnits(db.results.getInt(4));
             vaccine.setProductivity(db.results.getInt(5));
-        } catch (SQLException e) {
-            vaccine= Vaccine.badVaccine();
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -383,13 +378,12 @@ public class Solution {
 
     public static ReturnValue deleteVaccine(Vaccine vaccine) {
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT vaccineID FROM public.vaccines WHERE vaccineID=?", vaccine.getId());
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret = OK;
         try {
             db.prepare("DELETE FROM public.vaccines WHERE vaccineID=?");
             db.pstmt.setInt(1, vaccine.getId());
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -421,14 +415,13 @@ public class Solution {
 
     public static ReturnValue employeeLeftLab(Integer labID, Integer employeeID){
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT * FROM public.working WHERE labID=? AND employeeID=?", labID, employeeID);
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret = OK;
         try {
             db.prepare("DELETE FROM public.working WHERE labID=? AND employeeID=?");
             db.pstmt.setInt(1,labID);
-            db.pstmt.setInt(1,employeeID);
-            db.pstmt.execute();
+            db.pstmt.setInt(2,employeeID);
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -459,14 +452,13 @@ public class Solution {
 
     public static ReturnValue labStoppedProducingVaccine(Integer labID, Integer vaccineID) {
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT * FROM public.producing WHERE labID=? AND vaccineID=?", labID, vaccineID);
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret = OK;
         try {
             db.prepare("DELETE FROM public.producing WHERE labID=? AND vaccineID=?");
             db.pstmt.setInt(1,labID);
             db.pstmt.setInt(2,vaccineID);
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -478,9 +470,7 @@ public class Solution {
 
     public static ReturnValue vaccineSold(Integer vaccineID, Integer amount){
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT * FROM public.vaccines WHERE vaccineID=?", vaccineID);
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret = OK;
         try {
             db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost, income) =\n" +
                     "    (SELECT CASE WHEN productivity<85 THEN productivity+15\tELSE 100 END,\n" +
@@ -494,7 +484,8 @@ public class Solution {
             db.pstmt.setInt(2,amount);
             db.pstmt.setInt(3,vaccineID);
             db.pstmt.setInt(4,vaccineID);
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -508,9 +499,7 @@ public class Solution {
         if(amount<0)
             return BAD_PARAMS;
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT * FROM public.vaccines WHERE vaccineID=?", vaccineID);
-        if(ret!=OK)
-            return ret;
+        ReturnValue ret = OK;
         try {
             db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost) =\n" +
                     "    (SELECT CASE WHEN productivity>15 THEN productivity-15\tELSE 0 END,\n" +
@@ -522,7 +511,8 @@ public class Solution {
             db.pstmt.setInt(1,amount);
             db.pstmt.setInt(2,vaccineID);
             db.pstmt.setInt(3,vaccineID);
-            db.pstmt.execute();
+            if(db.pstmt.executeUpdate()==0)
+                ret=NOT_EXISTS;
         } catch (SQLException e) {
             ret= Utils.get_retval(e);
         }
@@ -534,10 +524,14 @@ public class Solution {
 
     public static Boolean isLabPopular(Integer labID) {
         DB db= new DB();
-        ReturnValue ret = db.exists("SELECT *\n" +
-                "FROM v_producing\n" +
-                "WHERE labID=? AND productivity<=20", labID);
-        boolean is_popular=ret==NOT_EXISTS;
+        boolean is_popular=false;
+        try {
+            db.get_record("SELECT *\n" +
+                    "FROM v_producing\n" +
+                    "WHERE labID=? AND productivity<=20", labID);
+        } catch (SQLException throwables) {
+            is_popular= true;
+        }
         db.close();
         return is_popular;
     }
@@ -547,11 +541,8 @@ public class Solution {
         int income=0;
         try {
             db.get_record("SELECT income FROM public.vaccines WHERE vaccineID=?", vaccineID);
-            if(db.results.getFetchSize()>0)
-                income=db.results.getInt(1);
-
-        } catch (SQLException e) {
-            //income= 0;
+            income=db.results.getInt(1);
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -562,12 +553,10 @@ public class Solution {
         DB db= new DB();
         int tot_work=0;
         try {
-            db.get_record("SELECT COUNT(*) FROM public.vaccines WHERE productivity>20");
-            if(db.results.getFetchSize()>0)
-                tot_work=db.results.getInt(1);
+            db.get_record("SELECT SUM(units_in_stock) FROM public.vaccines WHERE productivity>20");
+            tot_work=db.results.getInt(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -579,11 +568,9 @@ public class Solution {
         int tot_work=0;
         try {
             db.get_record("SELECT SUM(salary) FROM v_working WHERE labID=? AND is_active=true", labID);
-            if(db.results.getFetchSize()>0)
-                tot_work=db.results.getInt(1);
+            tot_work=db.results.getInt(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -600,11 +587,9 @@ public class Solution {
                     "GROUP BY labID\n" +
                     "ORDER BY COUNT(*) DESC, labID ASC\n" +
                     "LIMIT 1");
-            if(db.results.getFetchSize()>0)
-                best=db.results.getInt(1);
+            best=db.results.getInt(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -620,11 +605,9 @@ public class Solution {
                     "GROUP BY city\n" +
                     "ORDER BY COUNT(*) DESC, city DESC\n" +
                     "LIMIT 1\n");
-            if(db.results.getFetchSize()>0)
-                popular=db.results.getString(1);
+            popular=db.results.getString(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -633,9 +616,9 @@ public class Solution {
 
     public static ArrayList<Integer> getPopularLabs() {
         DB db= new DB();
-        ArrayList<Integer> popular= new ArrayList<Integer>();
+        ArrayList<Integer> popular= null;
         try {
-            db.get_record("SELECT DISTINCT labID\n" +
+            popular=db.get_array("SELECT DISTINCT labID\n" +
                     "FROM producing\n" +
                     "EXCEPT\n" +
                     "SELECT labID\n" +
@@ -643,11 +626,8 @@ public class Solution {
                     "WHERE vaccineID IN (SELECT vaccineID FROM vaccines WHERE productivity<=20)\n" +
                     "ORDER BY labID ASC\n" +
                     "LIMIT 3");
-            if(db.results.getFetchSize()>0)
-                popular= (ArrayList<Integer>) db.results.getArray(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -656,17 +636,14 @@ public class Solution {
 
     public static ArrayList<Integer> getMostRatedVaccines() {
         DB db= new DB();
-        ArrayList<Integer> rated= new ArrayList<Integer>();
+        ArrayList<Integer> rated= null;
         try {
-            db.get_record("SELECT vaccineID\n" +
+            rated=db.get_array("SELECT vaccineID\n" +
                     "FROM vaccines\n" +
                     "ORDER BY productivity+units_in_stock-cost DESC\n" +
                     "LIMIT 10");
-            if(db.results.getFetchSize()>0)
-                rated= (ArrayList<Integer>) db.results.getArray(1);
 
-        } catch (SQLException e) {
-            //tot_work= 0;
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
@@ -675,21 +652,18 @@ public class Solution {
 
     public static ArrayList<Integer> getCloseEmployees(Integer employeeID) {
         DB db= new DB();
-        ArrayList<Integer> rated= new ArrayList<Integer>();
+        ArrayList<Integer> rated= null;
         try {
-            db.get_record("SELECT w2.employeeID\n" +
+            rated =db.get_array("SELECT w2.employeeID\n" +
                     "FROM working w1\n" +
                     "INNER JOIN working w2 ON  w1.labID=w2.labID\n" +
-                    "WHERE w1.employeeID=1 AND w2.employeeID!=1\n" +
-                    "GROUP BY w2.employeeID\n" +
-                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(*) FROM working WHERE employeeID=1)>=0.5\n" +
+                    "CROSS JOIN (SELECT ? employeeID) PARAM\n" +
+                    "WHERE w1.employeeID=PARAM.employeeID AND w2.employeeID!=PARAM.employeeID\n" +
+                    "GROUP BY w2.employeeID, PARAM.employeeID\n" +
+                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(*) FROM working WHERE employeeID=PARAM.employeeID)>=0.5\n" +
                     "ORDER BY w2.employeeID ASC\n" +
-                    "LIMIT 10");
-            if(db.results.getFetchSize()>0)
-                rated= (ArrayList<Integer>) db.results.getArray(1);
-
-        } catch (SQLException e) {
-            //tot_work= 0;
+                    "LIMIT 10", employeeID);
+        } catch (SQLException ignored) {
         } finally {
             db.close();
         }
