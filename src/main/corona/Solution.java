@@ -95,7 +95,7 @@ public class Solution {
         public ArrayList<Integer> get_array(String sql,  int... params) throws SQLException {
             prepare(sql, params);
             results = pstmt.executeQuery();
-            ArrayList<Integer> arr = new ArrayList<Integer>();
+            ArrayList<Integer> arr = new ArrayList<>();
             while (results.next()) {
                 arr.add(results.getInt(1));
             }
@@ -307,7 +307,7 @@ public class Solution {
 
     public static Employee getEmployeeProfile(Integer employeeID) {
         DB db= new DB();
-        Employee employee = Employee.badEmployee();;
+        Employee employee = Employee.badEmployee();
         try {
             db.get_record("SELECT * FROM public.employees WHERE employeeID=?", employeeID);
             employee.setId(db.results.getInt(1));
@@ -526,9 +526,12 @@ public class Solution {
         DB db= new DB();
         boolean is_popular=false;
         try {
-            db.get_record("SELECT *\n" +
+            db.get_record("SELECT LabID\n" +
                     "FROM v_producing\n" +
-                    "WHERE labID=? AND productivity<=20", labID);
+                    "WHERE labID=? AND productivity<=20\n" +
+                    "UNION ALL\n" +
+                    "SELECT 0\n" +
+                    "WHERE ? NOT IN (SELECT LabID FROM labs)", labID, labID);
         } catch (SQLException throwables) {
             is_popular= true;
         }
@@ -567,7 +570,11 @@ public class Solution {
         DB db= new DB();
         int tot_work=0;
         try {
-            db.get_record("SELECT SUM(salary) FROM v_working WHERE labID=? AND is_active=true", labID);
+            db.get_record("SELECT SUM(salary)\n" +
+                    "FROM v_working\n" +
+                    "WHERE labID=? AND is_active=true\n" +
+                    "HAVING COUNT(*)>1\n" +
+                    "UNION ALL SELECT 0", labID);
             tot_work=db.results.getInt(1);
 
         } catch (SQLException ignored) {
@@ -603,7 +610,7 @@ public class Solution {
             db.get_record("SELECT city\n" +
                     "FROM v_working\n" +
                     "GROUP BY city\n" +
-                    "ORDER BY COUNT(*) DESC, city DESC\n" +
+                    "ORDER BY COUNT(*) DESC, city ASC\n" +
                     "LIMIT 1\n");
             popular=db.results.getString(1);
 
@@ -654,13 +661,20 @@ public class Solution {
         DB db= new DB();
         ArrayList<Integer> rated= null;
         try {
-            rated =db.get_array("SELECT w2.employeeID\n" +
-                    "FROM working w1\n" +
+            rated =db.get_array("WITH working_empty_way AS(\n" +
+                    "SELECT e.employeeID, w.labID\n" +
+                    "FROM employees e\n" +
+                    "LEFT JOIN working w\n" +
+                    "ON e.employeeID=w.employeeID\n" +
+                    "OR e.employeeID NOT IN (SELECT employeeID FROM working)\n" +
+                    ")\n" +
+                    "SELECT w2.employeeID\n" +
+                    "FROM working_empty_way w1\n" +
                     "INNER JOIN working w2 ON  w1.labID=w2.labID\n" +
                     "CROSS JOIN (SELECT ? employeeID) PARAM\n" +
                     "WHERE w1.employeeID=PARAM.employeeID AND w2.employeeID!=PARAM.employeeID\n" +
                     "GROUP BY w2.employeeID, PARAM.employeeID\n" +
-                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(*) FROM working WHERE employeeID=PARAM.employeeID)>=0.5\n" +
+                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(DISTINCT labID) FROM working_empty_way WHERE employeeID=PARAM.employeeID)>=0.5\n" +
                     "ORDER BY w2.employeeID ASC\n" +
                     "LIMIT 10", employeeID);
         } catch (SQLException ignored) {
