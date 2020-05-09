@@ -74,6 +74,8 @@ public class Solution {
                 pstmt.setInt(1, params[0]);
             if (params.length > 1)
                 pstmt.setInt(2, params[1]);
+            if (params.length > 2)
+                pstmt.setInt(3, params[1]);
         }
 
         public void close() {
@@ -95,7 +97,7 @@ public class Solution {
         public ArrayList<Integer> get_array(String sql,  int... params) throws SQLException {
             prepare(sql, params);
             results = pstmt.executeQuery();
-            ArrayList<Integer> arr = new ArrayList<>();
+            ArrayList<Integer> arr = new ArrayList<Integer>();
             while (results.next()) {
                 arr.add(results.getInt(1));
             }
@@ -473,7 +475,7 @@ public class Solution {
         ReturnValue ret = OK;
         try {
             db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost, income) =\n" +
-                    "    (SELECT CASE WHEN productivity<85 THEN productivity+15\tELSE 100 END,\n" +
+                    "    (SELECT LEAST(productivity+15, 100),\n" +
                     "\t \t\tunits_in_stock-?,\n" +
                     "\t \t\tcost*2,\n" +
                     "\t \t\tincome+?*cost\n" +
@@ -502,7 +504,7 @@ public class Solution {
         ReturnValue ret = OK;
         try {
             db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost) =\n" +
-                    "    (SELECT CASE WHEN productivity>15 THEN productivity-15\tELSE 0 END,\n" +
+                    "    (SELECT GREATEST(productivity-15, 0),\n" +
                     "\t \t\tunits_in_stock+?,\n" +
                     "\t \t\tcost/2\n" +
                     "\t FROM public.vaccines\n" +
@@ -543,7 +545,13 @@ public class Solution {
         DB db= new DB();
         int income=0;
         try {
-            db.get_record("SELECT income FROM public.vaccines WHERE vaccineID=?", vaccineID);
+            db.get_record("SELECT COALESCE(income,my_default)\n" +
+                    "FROM (SELECT 0 my_default) d\n" +
+                    "LEFT JOIN (\n" +
+                    "SELECT income\n" +
+                    "FROM vaccines\n" +
+                    "WHERE vaccineID=?) q\n" +
+                    "ON 1=1;", vaccineID);
             income=db.results.getInt(1);
         } catch (SQLException ignored) {
         } finally {
@@ -556,7 +564,9 @@ public class Solution {
         DB db= new DB();
         int tot_work=0;
         try {
-            db.get_record("SELECT SUM(units_in_stock) FROM public.vaccines WHERE productivity>20");
+            db.get_record("SELECT COALESCE(SUM(units_in_stock),0)\n" +
+                    "FROM public.vaccines\n" +
+                    "WHERE productivity>20;");
             tot_work=db.results.getInt(1);
 
         } catch (SQLException ignored) {
@@ -570,11 +580,14 @@ public class Solution {
         DB db= new DB();
         int tot_work=0;
         try {
-            db.get_record("SELECT SUM(salary)\n" +
+            db.get_record("SELECT COALESCE(TotalWages,my_default)\n" +
+                    "FROM (SELECT 0 my_default) d\n" +
+                    "LEFT JOIN (\n" +
+                    "SELECT SUM(salary) TotalWages\n" +
                     "FROM v_working\n" +
                     "WHERE labID=? AND is_active=true\n" +
-                    "HAVING COUNT(*)>1\n" +
-                    "UNION ALL SELECT 0", labID);
+                    "HAVING COUNT(*)>1) q\n" +
+                    "ON 1=1", labID);
             tot_work=db.results.getInt(1);
 
         } catch (SQLException ignored) {
@@ -588,12 +601,16 @@ public class Solution {
         DB db= new DB();
         int best=0;
         try {
-            db.get_record("SELECT labID\n" +
-                    "FROM v_working\n" +
-                    "WHERE city=birth_city\n" +
-                    "GROUP BY labID\n" +
-                    "ORDER BY COUNT(*) DESC, labID ASC\n" +
-                    "LIMIT 1");
+            db.get_record("SELECT COALESCE(BestLab,my_default)\n" +
+                    "FROM (SELECT 0 my_default) d\n" +
+                    "LEFT JOIN (\n" +
+                    "    SELECT labID AS BestLab\n" +
+                    "    FROM v_working\n" +
+                    "    WHERE city=birth_city\n" +
+                    "    GROUP BY labID\n" +
+                    "    ORDER BY COUNT(*) DESC, labID ASC\n" +
+                    "    LIMIT 1) q\n" +
+                    "ON 1=1;");
             best=db.results.getInt(1);
 
         } catch (SQLException ignored) {
@@ -607,11 +624,15 @@ public class Solution {
         DB db= new DB();
         String popular="";
         try {
-            db.get_record("SELECT city\n" +
-                    "FROM v_working\n" +
-                    "GROUP BY city\n" +
-                    "ORDER BY COUNT(*) DESC, city ASC\n" +
-                    "LIMIT 1\n");
+            db.get_record("SELECT COALESCE(PopularCity,my_default)\n" +
+                    "FROM (SELECT '' my_default) d\n" +
+                    "    LEFT JOIN (\n" +
+                    "    SELECT city AS PopularCity\n" +
+                    "    FROM v_working\n" +
+                    "    GROUP BY city\n" +
+                    "    ORDER BY COUNT(*) DESC, city ASC\n" +
+                    "    LIMIT 1) q\n" +
+                    "ON 1=1;");
             popular=db.results.getString(1);
 
         } catch (SQLException ignored) {
@@ -662,21 +683,20 @@ public class Solution {
         ArrayList<Integer> rated= null;
         try {
             rated =db.get_array("WITH working_empty_way AS(\n" +
-                    "SELECT e.employeeID, w.labID\n" +
-                    "FROM employees e\n" +
-                    "LEFT JOIN working w\n" +
-                    "ON e.employeeID=w.employeeID\n" +
-                    "OR e.employeeID NOT IN (SELECT employeeID FROM working)\n" +
+                    "    SELECT e.employeeID, w.labID\n" +
+                    "    FROM employees e\n" +
+                    "    LEFT JOIN working w\n" +
+                    "    ON e.employeeID=w.employeeID\n" +
+                    "    \n" +
                     ")\n" +
                     "SELECT w2.employeeID\n" +
                     "FROM working_empty_way w1\n" +
-                    "INNER JOIN working w2 ON  w1.labID=w2.labID\n" +
-                    "CROSS JOIN (SELECT ? employeeID) PARAM\n" +
-                    "WHERE w1.employeeID=PARAM.employeeID AND w2.employeeID!=PARAM.employeeID\n" +
-                    "GROUP BY w2.employeeID, PARAM.employeeID\n" +
-                    "HAVING CAST(COUNT(*) AS FLOAT)/(SELECT COUNT(DISTINCT labID) FROM working_empty_way WHERE employeeID=PARAM.employeeID)>=0.5\n" +
+                    "INNER JOIN working_empty_way w2 ON  w1.labID=w2.labID OR w1.labID IS NULL\n" +
+                    "WHERE w1.employeeID=? AND w2.employeeID!=?\n" +
+                    "GROUP BY w2.employeeID\n" +
+                    "HAVING COUNT(*)*2 >= (SELECT COUNT(*) FROM working WHERE employeeID=?)\n" +
                     "ORDER BY w2.employeeID ASC\n" +
-                    "LIMIT 10", employeeID);
+                    "LIMIT 10", employeeID, employeeID, employeeID);
         } catch (SQLException ignored) {
         } finally {
             db.close();
