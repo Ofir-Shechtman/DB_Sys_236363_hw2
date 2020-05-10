@@ -274,8 +274,11 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret=OK;
         try {
-            db.prepare("DELETE FROM public.labs WHERE labID=?");
-            db.pstmt.setInt(1, lab.getId());
+            db.prepare("DELETE FROM working WHERE labID=?;", lab.getId());
+            db.pstmt.executeUpdate();
+            db.prepare("DELETE FROM producing WHERE labID=?;", lab.getId());
+            db.pstmt.executeUpdate();
+            db.prepare("DELETE FROM public.labs WHERE labID=?;", lab.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
         } catch (SQLException e) {
@@ -326,8 +329,9 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret =OK;
         try {
-            db.prepare("DELETE FROM public.employees WHERE employeeID=?");
-            db.pstmt.setInt(1, employee.getId());
+            db.prepare("DELETE FROM working WHERE employeeID=?;", employee.getId());
+            db.pstmt.executeUpdate();
+            db.prepare("DELETE FROM employees WHERE employeeID=?;", employee.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
         } catch (SQLException e) {
@@ -382,8 +386,9 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret = OK;
         try {
-            db.prepare("DELETE FROM public.vaccines WHERE vaccineID=?");
-            db.pstmt.setInt(1, vaccine.getId());
+            db.prepare("DELETE FROM producing WHERE vaccineID=?;", vaccine.getId());
+            db.pstmt.executeUpdate();
+            db.prepare("DELETE FROM vaccines WHERE vaccineID=?;", vaccine.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
         } catch (SQLException e) {
@@ -474,25 +479,32 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret = OK;
         try {
-            db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost, income) =\n" +
-                    "    (SELECT LEAST(productivity+15, 100),\n" +
-                    "\t \t\tunits_in_stock-?,\n" +
-                    "\t \t\tcost*2,\n" +
-                    "\t \t\tincome+?*cost\n" +
-                    "\t FROM public.vaccines\n" +
-                    "     WHERE vaccineID=?)\n" +
-                    "WHERE vaccineID=?;");
-            db.pstmt.setInt(1,amount);
-            db.pstmt.setInt(2,amount);
-            db.pstmt.setInt(3,vaccineID);
-            db.pstmt.setInt(4,vaccineID);
-            if(db.pstmt.executeUpdate()==0)
-                ret=NOT_EXISTS;
-        } catch (SQLException e) {
-            ret= Utils.get_retval(e);
-        }
-        finally {
+            db.get_record("SELECT 0 WHERE ? > 0;", amount);
+        } catch (SQLException throwtables) {
+            ret = BAD_PARAMS;
             db.close();
+        }
+        if(ret==OK) {
+            try {
+                db.prepare("UPDATE public.vaccines SET (productivity, units_in_stock, cost, income) =\n" +
+                        "    (SELECT LEAST(productivity+15, 100),\n" +
+                        "\t \t\tunits_in_stock-?,\n" +
+                        "\t \t\tcost*2,\n" +
+                        "\t \t\tincome+?*cost\n" +
+                        "\t FROM public.vaccines\n" +
+                        "     WHERE vaccineID=?)\n" +
+                        "WHERE vaccineID=?;");
+                db.pstmt.setInt(1, amount);
+                db.pstmt.setInt(2, amount);
+                db.pstmt.setInt(3, vaccineID);
+                db.pstmt.setInt(4, vaccineID);
+                if (db.pstmt.executeUpdate() == 0)
+                    ret = NOT_EXISTS;
+            } catch (SQLException e) {
+                ret = Utils.get_retval(e);
+            } finally {
+                db.close();
+            }
         }
         return ret;
     }
@@ -534,7 +546,7 @@ public class Solution {
                     "UNION ALL\n" +
                     "SELECT 0\n" +
                     "WHERE ? NOT IN (SELECT LabID FROM labs)", labID, labID);
-        } catch (SQLException throwables) {
+        } catch (SQLException throwtables) {
             is_popular= true;
         }
         db.close();
@@ -627,10 +639,10 @@ public class Solution {
             db.get_record("SELECT COALESCE(PopularCity,my_default)\n" +
                     "FROM (SELECT '' my_default) d\n" +
                     "    LEFT JOIN (\n" +
-                    "    SELECT city AS PopularCity\n" +
+                    "    SELECT birth_city AS PopularCity\n" +
                     "    FROM v_working\n" +
-                    "    GROUP BY city\n" +
-                    "    ORDER BY COUNT(*) DESC, city ASC\n" +
+                    "    GROUP BY birth_city\n" +
+                    "    ORDER BY COUNT(*) DESC, birth_city DESC\n" +
                     "    LIMIT 1) q\n" +
                     "ON 1=1;");
             popular=db.results.getString(1);
