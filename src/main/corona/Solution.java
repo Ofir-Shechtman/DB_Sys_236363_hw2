@@ -97,7 +97,7 @@ public class Solution {
         public ArrayList<Integer> get_array(String sql,  int... params) throws SQLException {
             prepare(sql, params);
             results = pstmt.executeQuery();
-            ArrayList<Integer> arr = new ArrayList<Integer>();
+            ArrayList<Integer> arr = new ArrayList<>();
             while (results.next()) {
                 arr.add(results.getInt(1));
             }
@@ -146,8 +146,8 @@ public class Solution {
                     "\tlabID integer,\n" +
                     "\tsalary integer NOT NULL,\n" +
                     "\tPRIMARY KEY (employeeID, labID),\n" +
-                    "\tFOREIGN KEY (employeeID) REFERENCES employees(employeeID),\n" +
-                    "\tFOREIGN KEY (labID) REFERENCES labs(labID),\n" +
+                    "\tFOREIGN KEY (employeeID) REFERENCES employees(employeeID) ON DELETE CASCADE,\n" +
+                    "\tFOREIGN KEY (labID) REFERENCES labs(labID) ON DELETE CASCADE,\n" +
                     "\tCHECK (salary >= 0)\n" +
                     ");\n" +
                     "\n" +
@@ -156,8 +156,8 @@ public class Solution {
                     "\tvaccineID integer,\n" +
                     "\tlabID integer,\n" +
                     "\tPRIMARY KEY (vaccineID, labID),\n" +
-                    "\tFOREIGN KEY (vaccineID) REFERENCES vaccines(vaccineID),\n" +
-                    "\tFOREIGN KEY (labID) REFERENCES labs(labID)\n" +
+                    "\tFOREIGN KEY (vaccineID) REFERENCES vaccines(vaccineID) ON DELETE CASCADE,\n" +
+                    "\tFOREIGN KEY (labID) REFERENCES labs(labID) ON DELETE CASCADE\n" +
                     ");\n" +
                     "\n" +
                     "CREATE OR REPLACE VIEW public.v_producing AS\n" +
@@ -274,10 +274,6 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret=OK;
         try {
-            db.prepare("DELETE FROM working WHERE labID=?;", lab.getId());
-            db.pstmt.executeUpdate();
-            db.prepare("DELETE FROM producing WHERE labID=?;", lab.getId());
-            db.pstmt.executeUpdate();
             db.prepare("DELETE FROM public.labs WHERE labID=?;", lab.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
@@ -329,8 +325,6 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret =OK;
         try {
-            db.prepare("DELETE FROM working WHERE employeeID=?;", employee.getId());
-            db.pstmt.executeUpdate();
             db.prepare("DELETE FROM employees WHERE employeeID=?;", employee.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
@@ -386,8 +380,6 @@ public class Solution {
         DB db= new DB();
         ReturnValue ret = OK;
         try {
-            db.prepare("DELETE FROM producing WHERE vaccineID=?;", vaccine.getId());
-            db.pstmt.executeUpdate();
             db.prepare("DELETE FROM vaccines WHERE vaccineID=?;", vaccine.getId());
             if(db.pstmt.executeUpdate()==0)
                 ret=NOT_EXISTS;
